@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minecraft Isometric Tile Generator</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+            linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
+            #111;
+        background-size: 24px 24px;
+        color: #eee;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        display: flex;
+        justify-content: center;
+        padding: 40px 20px;
+    }
+
+    .app {
+        width: min(900px, 100%);
+    }
+
+    h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        font-weight: 700;
+    }
+
+    .subtitle {
+        margin: 0 0 28px;
+        color: #999;
+    }
+
+    .panel {
+        background: #191919;
+        border: 1px solid #303030;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .controls {
+        padding: 18px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        border-bottom: 1px solid #303030;
+        flex-wrap: wrap;
+    }
+
+    input[type="file"] {
+        display: none;
+    }
+
+    .button {
+        border: 1px solid #444;
+        background: #252525;
+        color: #eee;
+        padding: 9px 14px;
+        border-radius: 7px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background .15s, border-color .15s;
+    }
+
+    .button:hover {
+        background: #303030;
+        border-color: #555;
+    }
+
+    .button.primary {
+        background: #3a7d44;
+        border-color: #4d9859;
+    }
+
+    .button.primary:hover {
+        background: #468e50;
+    }
+
+    .settings {
+        margin-left: auto;
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        color: #aaa;
+        font-size: 14px;
+    }
+
+    .settings label {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+    }
+
+    input[type="number"] {
+        width: 65px;
+        background: #101010;
+        border: 1px solid #3a3a3a;
+        color: white;
+        padding: 7px;
+        border-radius: 5px;
+    }
+
+    .preview {
+        min-height: 500px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 45px;
+        background:
+            linear-gradient(45deg, #222 25%, transparent 25%),
+            linear-gradient(-45deg, #222 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, #222 75%),
+            linear-gradient(-45deg, transparent 75%, #222 75%);
+        background-size: 24px 24px;
+        background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+        background-color: #181818;
+        overflow: auto;
+    }
+
+    canvas {
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        max-width: min(70vw, 600px);
+        max-height: 500px;
+        width: auto;
+        height: auto;
+        filter: drop-shadow(0 12px 20px rgba(0,0,0,.45));
+    }
+
+    .empty {
+        text-align: center;
+        color: #777;
+        user-select: none;
+    }
+
+    .empty strong {
+        display: block;
+        color: #aaa;
+        margin-bottom: 5px;
+    }
+
+    .info {
+        padding: 14px 18px;
+        color: #777;
+        font-size: 13px;
+        border-top: 1px solid #303030;
+    }
+
+    @media (max-width: 650px) {
+        .settings {
+            margin-left: 0;
+            width: 100%;
+        }
+
+        .preview {
+            min-height: 350px;
+            padding: 25px;
+        }
+    }
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <h1>Minecraft Isometric Tile</h1>
+    <p class="subtitle">
+        Turn a Minecraft texture into a 45° isometric diamond tile.
+    </p>
+
+    <div class="panel">
+
+        <div class="controls">
+
+            <label class="button primary">
+                Upload texture
+                <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp">
+            </label>
+
+            <button id="download" class="button" disabled>
+                Download PNG
+            </button>
+
+            <div class="settings">
+
+                <label>
+                    Height
+                    <input id="height" type="number" value="57.774" min="10" max="100" step="0.1">
+                    %
+                </label>
+
+                <label>
+                    <input id="pixelMode" type="checkbox" checked>
+                    Pixel perfect
+                </label>
+
+            </div>
+
+        </div>
+
+        <div class="preview" id="preview">
+            <div class="empty" id="empty">
+                <strong>Upload a Minecraft texture</strong>
+                The generated isometric tile will appear here.
+            </div>
+
+            <canvas id="canvas" hidden></canvas>
+        </div>
+
+        <div class="info">
+            The texture is rotated 45° and vertically compressed to create the
+            classic diamond-shaped isometric tile.
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+const fileInput = document.getElementById("fileInput");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const empty = document.getElementById("empty");
+const download = document.getElementById("download");
+const heightInput = document.getElementById("height");
+const pixelMode = document.getElementById("pixelMode");
+
+let sourceImage = null;
+
+fileInput.addEventListener("change", () => {
+    const file = fileInput.files[0];
+
+    if (!file) return;
+
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+
+    img.onload = () => {
+        sourceImage = img;
+        URL.revokeObjectURL(url);
+
+        empty.hidden = true;
+        canvas.hidden = false;
+        download.disabled = false;
+
+        generate();
+    };
+
+    img.src = url;
+});
+
+heightInput.addEventListener("input", generate);
+pixelMode.addEventListener("change", generate);
+
+function generate() {
+    if (!sourceImage) return;
+
+    const w = sourceImage.naturalWidth;
+    const h = sourceImage.naturalHeight;
+
+    /*
+        A square Minecraft texture becomes a diamond after rotation.
+
+        Rotating a W×H square by 45° gives a bounding box approximately:
+
+            width  = W * sqrt(2)
+            height = H * sqrt(2)
+
+        We then compress the vertical dimension.
+
+        For a normal isometric tile:
+            vertical scale ≈ 50%
+
+        This gives the familiar:
+
+                 /\
+                /  \
+               /    \
+               \    /
+                \  /
+                 \/
+    */
+
+    const angle = Math.PI / 4;
+    const scaleY = Number(heightInput.value) / 100;
+
+    const rotatedSize =
+        Math.ceil(Math.sqrt(w * w + h * h));
+
+    const outputWidth = rotatedSize;
+    const outputHeight = Math.ceil(rotatedSize * scaleY);
+
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
+
+    ctx.clearRect(0, 0, outputWidth, outputHeight);
+
+    if (pixelMode.checked) {
+        ctx.imageSmoothingEnabled = false;
+    } else {
+        ctx.imageSmoothingEnabled = true;
+    }
+
+    /*
+        Rotate the original image around its centre.
+    */
+
+    ctx.save();
+
+    ctx.translate(
+        outputWidth / 2,
+        outputHeight / 2
+    );
+
+    ctx.rotate(angle);
+
+    /*
+        Compress the vertical axis after rotation.
+
+        Because scaling happens before the rotation in canvas
+        transform order, we compensate by using a temporary canvas.
+    */
+
+    ctx.restore();
+
+    // Temporary canvas for the rotated texture
+    const temp = document.createElement("canvas");
+    temp.width = rotatedSize;
+    temp.height = rotatedSize;
+
+    const tctx = temp.getContext("2d");
+
+    tctx.imageSmoothingEnabled = !pixelMode.checked;
+
+    tctx.translate(
+        rotatedSize / 2,
+        rotatedSize / 2
+    );
+
+    tctx.rotate(angle);
+
+    tctx.drawImage(
+        sourceImage,
+        -w / 2,
+        -h / 2
+    );
+
+    /*
+        Now vertically compress the rotated image.
+    */
+
+    ctx.drawImage(
+        temp,
+        0,
+        0,
+        rotatedSize,
+        rotatedSize,
+        0,
+        0,
+        outputWidth,
+        outputHeight
+    );
+}
+
+download.addEventListener("click", () => {
+    if (!sourceImage) return;
+
+    canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "minecraft-isometric-tile.png";
+        a.click();
+
+        URL.revokeObjectURL(url);
+    }, "image/png");
+});
+</script>
+
+</body>
+</html>
+
