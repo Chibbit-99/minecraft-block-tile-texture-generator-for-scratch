@@ -309,16 +309,28 @@ function generate() {
     */
     const upscale =
         originalDiagonal < TARGET_WIDTH
-            ? Math.max(1, Math.floor(TARGET_WIDTH / originalDiagonal))
+            ? Math.max(1, Math.ceil(TARGET_WIDTH / originalDiagonal))
             : 1;
 
-    const w = originalW * upscale;
-    const h = originalH * upscale;
+    const w = Math.round(originalW * upscale);
+    const h = Math.round(originalH * upscale);
 
-    const transformedWidth =
-        Math.ceil(Math.sqrt(w * w + h * h));
+    /*
+        Rasterize the enlargement first at exact integer dimensions.
+        Scaling and rotating in the same drawImage call can sample the
+        source grid at fractional positions, making the texture appear
+        subtly pulled or stretched.
+    */
+    const scaledSource = document.createElement("canvas");
+    scaledSource.width = w;
+    scaledSource.height = h;
 
-    const rotatedSize = transformedWidth;
+    const sctx = scaledSource.getContext("2d");
+    sctx.imageSmoothingEnabled = false;
+    sctx.drawImage(sourceImage, 0, 0, w, h);
+
+    const transformedWidth = Math.sqrt(w * w + h * h);
+    const rotatedSize = Math.ceil(transformedWidth);
 
     const outputWidth = rotatedSize;
     const outputHeight = Math.ceil(rotatedSize * scaleY);
@@ -373,11 +385,9 @@ function generate() {
     tctx.rotate(angle);
 
     tctx.drawImage(
-        sourceImage,
+        scaledSource,
         -w / 2,
-        -h / 2,
-        w,
-        h
+        -h / 2
     );
 
     /*
