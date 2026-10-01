@@ -290,14 +290,26 @@ function generate() {
             originalH * originalH
         );
 
+    /*
+        Pixel-art textures should only be enlarged by whole-pixel
+        multiples. Fractional scaling (for example 10.04×) makes the
+        browser interpolate which source pixels belong to output pixels,
+        causing some Minecraft texture pixels to become warped.
+
+        Find the smallest integer scale factor that makes the rotated
+        bounding box large enough for the 227 px target.
+    */
     const upscale =
         originalDiagonal < TARGET_WIDTH
-            ? TARGET_WIDTH / originalDiagonal
+            ? Math.ceil(TARGET_WIDTH / originalDiagonal)
             : 1;
 
     const w = originalW * upscale;
     const h = originalH * upscale;
 
+    // The canvas is still exactly 227 px wide when an upscale is needed.
+    // The integer-scaled texture itself is never stretched to fill the
+    // remaining fraction of a pixel.
     const rotatedSize =
         upscale > 1
             ? TARGET_WIDTH
