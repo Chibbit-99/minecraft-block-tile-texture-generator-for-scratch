@@ -379,6 +379,16 @@ function generate() {
         Now vertically compress the rotated image.
     */
 
+    /*
+        Flip the final tile horizontally. Scratch's side-face renderer
+        expects the generated diamond to have the opposite horizontal
+        orientation from the raw 45° transform.
+    */
+    ctx.save();
+
+    ctx.translate(outputWidth, 0);
+    ctx.scale(-1, 1);
+
     ctx.drawImage(
         temp,
         0,
@@ -390,6 +400,8 @@ function generate() {
         outputWidth,
         outputHeight
     );
+
+    ctx.restore();
 }
 
 download.addEventListener("click", () => {
