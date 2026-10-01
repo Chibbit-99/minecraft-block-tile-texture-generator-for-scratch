@@ -265,37 +265,43 @@ pixelMode.addEventListener("change", generate);
 function generate() {
     if (!sourceImage) return;
 
-    const w = sourceImage.naturalWidth;
-    const h = sourceImage.naturalHeight;
+    const originalW = sourceImage.naturalWidth;
+    const originalH = sourceImage.naturalHeight;
 
     /*
-        A square Minecraft texture becomes a diamond after rotation.
+        Rotating a W×H image by 45° gives a bounding-box diagonal of:
 
-        Rotating a W×H square by 45° gives a bounding box approximately:
+            sqrt(W² + H²)
 
-            width  = W * sqrt(2)
-            height = H * sqrt(2)
+        Scratch's tile is intended to be 227 px wide. If the uploaded
+        texture is too small, upscale it before rotating so that its
+        transformed width reaches 227 px.
 
-        We then compress the vertical dimension.
-
-        For a normal isometric tile:
-            vertical scale ≈ 50%
-
-        This gives the familiar:
-
-                 /\
-                /  \
-               /    \
-               \    /
-                \  /
-                 \/
+        Larger textures are left at their original resolution.
     */
 
+    const TARGET_WIDTH = 227;
     const angle = Math.PI / 4;
     const scaleY = Number(heightInput.value) / 100;
 
+    const originalDiagonal =
+        Math.sqrt(
+            originalW * originalW +
+            originalH * originalH
+        );
+
+    const upscale =
+        originalDiagonal < TARGET_WIDTH
+            ? TARGET_WIDTH / originalDiagonal
+            : 1;
+
+    const w = originalW * upscale;
+    const h = originalH * upscale;
+
     const rotatedSize =
-        Math.ceil(Math.sqrt(w * w + h * h));
+        upscale > 1
+            ? TARGET_WIDTH
+            : Math.ceil(originalDiagonal);
 
     const outputWidth = rotatedSize;
     const outputHeight = Math.ceil(rotatedSize * scaleY);
@@ -352,7 +358,9 @@ function generate() {
     tctx.drawImage(
         sourceImage,
         -w / 2,
-        -h / 2
+        -h / 2,
+        w,
+        h
     );
 
     /*
