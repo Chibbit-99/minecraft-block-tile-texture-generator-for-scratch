@@ -370,13 +370,18 @@ downloadGif.addEventListener("click", async () => {
     const frameA = document.createElement("canvas");
     frameA.width = canvas.width;
     frameA.height = canvas.height;
-    frameA.getContext("2d").drawImage(canvas, 0, 0);
+    const actx = frameA.getContext("2d");
+    actx.fillStyle = "rgb(1, 0, 1)";
+    actx.fillRect(0, 0, frameA.width, frameA.height);
+    actx.drawImage(canvas, 0, 0);
 
     const frameB = document.createElement("canvas");
     frameB.width = canvas.width;
     frameB.height = canvas.height;
 
     const bctx = frameB.getContext("2d");
+    bctx.fillStyle = "rgb(1, 0, 1)";
+    bctx.fillRect(0, 0, frameB.width, frameB.height);
     bctx.translate(frameB.width, 0);
     bctx.scale(-1, 1);
     bctx.drawImage(canvas, 0, 0);
@@ -387,7 +392,7 @@ downloadGif.addEventListener("click", async () => {
         width: canvas.width,
         height: canvas.height,
         workerScript: "./vendor/gif.worker.js",
-        transparent: 0x000000
+        transparent: 0x010001
     });
 
     gif.addFrame(frameA, {delay: 500, copy: true});
