@@ -278,41 +278,26 @@ function generate() {
     const TARGET_WIDTH = 227;
     const angle = Math.PI / 4;
     const scaleY = Number(heightInput.value) / 100;
+    const pixelPerfect = pixelMode.checked;
 
     /*
-        Minecraft textures are enlarged by a whole-number scale factor
-        before rotation. This keeps every source pixel a clean block.
+        Scale the source directly to the size needed for a 227 px
+        rotated bounding box. Do not use integer scaling: fractional
+        scaling is necessary for arbitrary source resolutions.
     */
-    const originalDiagonal = Math.hypot(originalW, originalH);
-    const upscale = originalDiagonal < TARGET_WIDTH
-        ? Math.ceil(TARGET_WIDTH / originalDiagonal)
-        : 1;
-
-    const w = originalW * upscale;
-    const h = originalH * upscale;
+    const diagonal = Math.hypot(originalW, originalH);
+    const sourceScale = TARGET_WIDTH / diagonal;
+    const w = originalW * sourceScale;
+    const h = originalH * sourceScale;
 
     const scaledSource = document.createElement("canvas");
-    scaledSource.width = w;
-    scaledSource.height = h;
+    scaledSource.width = TARGET_WIDTH;
+    scaledSource.height = Math.ceil(h);
 
     const sctx = scaledSource.getContext("2d");
-    sctx.imageSmoothingEnabled = false;
+    sctx.imageSmoothingEnabled = !pixelPerfect;
     sctx.drawImage(sourceImage, 0, 0, w, h);
 
-    const outputWidth = TARGET_WIDTH;
-    const outputHeight = Math.ceil(outputWidth * scaleY);
-
-    canvas.width = outputWidth;
-    canvas.height = outputHeight;
-
-    ctx.clearRect(0, 0, outputWidth, outputHeight);
-    ctx.imageSmoothingEnabled = false;
-
-    /*
-        Rotate into the exact bounding box of the 45° result.
-        No extra transparent border is included, so the diamond is not
-        offset or subtly distorted by scaling an oversized square.
-    */
     const rotatedWidth = Math.ceil(
         Math.abs(w * Math.cos(angle)) +
         Math.abs(h * Math.sin(angle))
@@ -327,15 +312,25 @@ function generate() {
     rotated.height = rotatedHeight;
 
     const rctx = rotated.getContext("2d");
-    rctx.imageSmoothingEnabled = false;
+    rctx.imageSmoothingEnabled = !pixelPerfect;
     rctx.translate(rotatedWidth / 2, rotatedHeight / 2);
     rctx.rotate(angle);
-    rctx.drawImage(scaledSource, -w / 2, -h / 2);
+    rctx.drawImage(sourceImage, -w / 2, -h / 2, w, h);
+
+    const outputWidth = TARGET_WIDTH;
+    const outputHeight = Math.ceil(outputWidth * scaleY);
+
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
+
+    ctx.clearRect(0, 0, outputWidth, outputHeight);
+    ctx.imageSmoothingEnabled = !pixelPerfect;
 
     /*
-        The rotated diamond is fitted to exactly 227 px wide, then its
-        vertical dimension is compressed by the selected percentage.
-        Finally, flip it horizontally for Scratch's side-texture layout.
+        Rotate first at the mathematically correct aspect ratio, then
+        apply only the requested vertical compression. This prevents
+        the rotation itself from being warped by independently scaling
+        the rotated image to the final width and height.
     */
     ctx.save();
     ctx.translate(outputWidth, 0);
@@ -349,7 +344,7 @@ function generate() {
         0,
         0,
         outputWidth,
-        outputHeight
+        rotatedHeight * scaleY
     );
     ctx.restore();
 }
@@ -391,7 +386,8 @@ downloadGif.addEventListener("click", async () => {
         quality: 1,
         width: canvas.width,
         height: canvas.height,
-        workerScript: "./vendor/gif.worker.js"
+        workerScript: "./vendor/gif.worker.js",
+        transparent: 0x000000
     });
 
     gif.addFrame(frameA, {delay: 500, copy: true});
