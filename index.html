@@ -299,21 +299,26 @@ function generate() {
         Find the smallest integer scale factor that makes the rotated
         bounding box large enough for the 227 px target.
     */
+    /*
+        Use the largest whole-number scale that still fits inside the
+        227 px target. Using ceil() here can make the rotated texture
+        larger than the temporary canvas and clip all four corners.
+
+        Any unused pixels are left as transparent padding rather than
+        stretching or cropping the pixel art.
+    */
     const upscale =
         originalDiagonal < TARGET_WIDTH
-            ? Math.ceil(TARGET_WIDTH / originalDiagonal)
+            ? Math.max(1, Math.floor(TARGET_WIDTH / originalDiagonal))
             : 1;
 
     const w = originalW * upscale;
     const h = originalH * upscale;
 
-    // The canvas is still exactly 227 px wide when an upscale is needed.
-    // The integer-scaled texture itself is never stretched to fill the
-    // remaining fraction of a pixel.
-    const rotatedSize =
-        upscale > 1
-            ? TARGET_WIDTH
-            : Math.ceil(originalDiagonal);
+    const transformedWidth =
+        Math.ceil(Math.sqrt(w * w + h * h));
+
+    const rotatedSize = transformedWidth;
 
     const outputWidth = rotatedSize;
     const outputHeight = Math.ceil(rotatedSize * scaleY);
@@ -389,15 +394,19 @@ function generate() {
     ctx.translate(outputWidth, 0);
     ctx.scale(-1, 1);
 
+    // Keep the integer-scaled rotated texture at its native size.
+    // Center it inside the 227 px output instead of stretching it.
+    const offsetX = (outputWidth - rotatedSize) / 2;
+
     ctx.drawImage(
         temp,
-        0,
+        offsetX,
         0,
         rotatedSize,
         rotatedSize,
         0,
         0,
-        outputWidth,
+        rotatedSize,
         outputHeight
     );
 
