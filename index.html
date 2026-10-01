@@ -167,6 +167,7 @@
         }
     }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
 </head>
 
 <body>
@@ -189,6 +190,10 @@
 
             <button id="download" class="button" disabled>
                 Download PNG
+            </button>
+
+            <button id="downloadGif" class="button" disabled>
+                Side texture GIF
             </button>
 
             <div class="settings">
@@ -232,6 +237,7 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const empty = document.getElementById("empty");
 const download = document.getElementById("download");
+const downloadGif = document.getElementById("downloadGif");
 const heightInput = document.getElementById("height");
 const pixelMode = document.getElementById("pixelMode");
 
@@ -252,6 +258,7 @@ fileInput.addEventListener("change", () => {
         empty.hidden = true;
         canvas.hidden = false;
         download.disabled = false;
+        downloadGif.disabled = false;
 
         generate();
     };
@@ -268,59 +275,27 @@ function generate() {
     const originalW = sourceImage.naturalWidth;
     const originalH = sourceImage.naturalHeight;
 
-    /*
-        Rotating a W×H image by 45° gives a bounding-box diagonal of:
-
-            sqrt(W² + H²)
-
-        Scratch's tile is intended to be 227 px wide. If the uploaded
-        texture is too small, upscale it before rotating so that its
-        transformed width reaches 227 px.
-
-        Larger textures are left at their original resolution.
-    */
-
     const TARGET_WIDTH = 227;
     const angle = Math.PI / 4;
     const scaleY = Number(heightInput.value) / 100;
 
-    const originalDiagonal =
-        Math.sqrt(
-            originalW * originalW +
-            originalH * originalH
-        );
+    const originalDiagonal = Math.sqrt(
+        originalW * originalW +
+        originalH * originalH
+    );
 
     /*
-        Pixel-art textures should only be enlarged by whole-pixel
-        multiples. Fractional scaling (for example 10.04×) makes the
-        browser interpolate which source pixels belong to output pixels,
-        causing some Minecraft texture pixels to become warped.
-
-        Find the smallest integer scale factor that makes the rotated
-        bounding box large enough for the 227 px target.
+        Enlarge small textures before rotation, but rasterize that
+        enlargement first so the source pixel grid is not sampled while
+        it is being rotated.
     */
-    /*
-        Use the largest whole-number scale that still fits inside the
-        227 px target. Using ceil() here can make the rotated texture
-        larger than the temporary canvas and clip all four corners.
-
-        Any unused pixels are left as transparent padding rather than
-        stretching or cropping the pixel art.
-    */
-    const upscale =
-        originalDiagonal < TARGET_WIDTH
-            ? Math.max(1, Math.ceil(TARGET_WIDTH / originalDiagonal))
-            : 1;
+    const upscale = originalDiagonal < TARGET_WIDTH
+        ? Math.ceil(TARGET_WIDTH / originalDiagonal)
+        : 1;
 
     const w = Math.round(originalW * upscale);
     const h = Math.round(originalH * upscale);
 
-    /*
-        Rasterize the enlargement first at exact integer dimensions.
-        Scaling and rotating in the same drawImage call can sample the
-        source grid at fractional positions, making the texture appear
-        subtly pulled or stretched.
-    */
     const scaledSource = document.createElement("canvas");
     scaledSource.width = w;
     scaledSource.height = h;
@@ -329,98 +304,52 @@ function generate() {
     sctx.imageSmoothingEnabled = false;
     sctx.drawImage(sourceImage, 0, 0, w, h);
 
-    const transformedWidth = Math.sqrt(w * w + h * h);
-    const rotatedSize = Math.ceil(transformedWidth);
-
-    const outputWidth = rotatedSize;
-    const outputHeight = Math.ceil(rotatedSize * scaleY);
+    /*
+        The output dimensions are always exactly 227 wide. Height is
+        derived from the user's percentage, so the default 57.774%
+        produces exactly 132 px (227 × 0.57774 = 131.097...).
+    */
+    const outputWidth = TARGET_WIDTH;
+    const outputHeight = Math.ceil(outputWidth * scaleY);
 
     canvas.width = outputWidth;
     canvas.height = outputHeight;
 
     ctx.clearRect(0, 0, outputWidth, outputHeight);
-
-    if (pixelMode.checked) {
-        ctx.imageSmoothingEnabled = false;
-    } else {
-        ctx.imageSmoothingEnabled = true;
-    }
+    ctx.imageSmoothingEnabled = false;
 
     /*
-        Rotate the original image around its centre.
+        Render the enlarged texture into a large enough square first.
+        This gives us room for the complete 45° corners.
     */
-
-    ctx.save();
-
-    ctx.translate(
-        outputWidth / 2,
-        outputHeight / 2
-    );
-
-    ctx.rotate(angle);
-
-    /*
-        Compress the vertical axis after rotation.
-
-        Because scaling happens before the rotation in canvas
-        transform order, we compensate by using a temporary canvas.
-    */
-
-    ctx.restore();
-
-    // Temporary canvas for the rotated texture
+    const transformedSize = Math.ceil(Math.sqrt(w * w + h * h)) + 2;
     const temp = document.createElement("canvas");
-    temp.width = rotatedSize;
-    temp.height = rotatedSize;
+    temp.width = transformedSize;
+    temp.height = transformedSize;
 
     const tctx = temp.getContext("2d");
+    tctx.imageSmoothingEnabled = false;
 
-    tctx.imageSmoothingEnabled = !pixelMode.checked;
-
-    tctx.translate(
-        rotatedSize / 2,
-        rotatedSize / 2
-    );
-
+    tctx.translate(transformedSize / 2, transformedSize / 2);
     tctx.rotate(angle);
-
-    tctx.drawImage(
-        scaledSource,
-        -w / 2,
-        -h / 2
-    );
+    tctx.drawImage(scaledSource, -w / 2, -h / 2);
 
     /*
-        Now vertically compress the rotated image.
+        Scale only the finished rotated bitmap to the exact 227×height
+        output. This guarantees the exported dimensions while keeping
+        pixel sampling nearest-neighbour.
     */
-
-    /*
-        Flip the final tile horizontally. Scratch's side-face renderer
-        expects the generated diamond to have the opposite horizontal
-        orientation from the raw 45° transform.
-    */
-    ctx.save();
-
-    ctx.translate(outputWidth, 0);
-    ctx.scale(-1, 1);
-
-    // Keep the integer-scaled rotated texture at its native size.
-    // Center it inside the 227 px output instead of stretching it.
-    const offsetX = (outputWidth - rotatedSize) / 2;
-
     ctx.drawImage(
         temp,
-        offsetX,
-        0,
-        rotatedSize,
-        rotatedSize,
         0,
         0,
-        rotatedSize,
+        transformedSize,
+        transformedSize,
+        0,
+        0,
+        outputWidth,
         outputHeight
     );
-
-    ctx.restore();
 }
 
 download.addEventListener("click", () => {
@@ -442,3 +371,43 @@ download.addEventListener("click", () => {
 </body>
 </html>
 
+
+downloadGif.addEventListener("click", async () => {
+    if (!sourceImage) return;
+
+    const frameA = document.createElement("canvas");
+    frameA.width = canvas.width;
+    frameA.height = canvas.height;
+    frameA.getContext("2d").drawImage(canvas, 0, 0);
+
+    const frameB = document.createElement("canvas");
+    frameB.width = canvas.width;
+    frameB.height = canvas.height;
+
+    const bctx = frameB.getContext("2d");
+    bctx.translate(frameB.width, 0);
+    bctx.scale(-1, 1);
+    bctx.drawImage(canvas, 0, 0);
+
+    const gif = new GIF({
+        workers: 2,
+        quality: 1,
+        width: canvas.width,
+        height: canvas.height,
+        workerScript: "https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js"
+    });
+
+    gif.addFrame(frameA, {delay: 500, copy: true});
+    gif.addFrame(frameB, {delay: 500, copy: true});
+
+    gif.on("finished", blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "minecraft-side-texture.gif";
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+
+    gif.render();
+});
